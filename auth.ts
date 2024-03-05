@@ -5,6 +5,7 @@ import { JWT } from "next-auth/jwt";
 import { getUserById } from "@/data/user";
 import { db } from "./lib/db";
 import authConfig from "@/auth.config";
+import { getTwoFactorConfirmationByUserId } from "./data/two-factor-confirmation";
 
 declare module "next-auth" {
   interface User {
@@ -42,9 +43,23 @@ export const {
       if (account?.provider !== "credentials") return true;
 
       //Prevent sign in without email verification
-      if (user.id) {
-        const existingUser = await getUserById(user.id);
-        if (!existingUser?.emailVerified) return false;
+
+      const existingUser = await getUserById(user.id!);
+      if (!existingUser?.emailVerified) return false;
+
+      if (existingUser.isTwoFactorEnabled) {
+        const twoFactorConfirmation = await getTwoFactorConfirmationByUserId(
+          existingUser.id
+        );
+
+        if (!twoFactorConfirmation) return false;
+
+        //Delete two factor confirmation for next sign in
+        await db.twoFactorConfirmation.delete({
+          where: {
+            id: twoFactorConfirmation.id,
+          },
+        });
       }
 
       return true;
